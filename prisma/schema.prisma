@@ -10,6 +10,15 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Users {
+  id Int @id @default(autoincrement()) @map("id")
+  nickname String @unique @map("nickname")
+  password String @map("password")
+  authorization String @map("authorization")
+
+  @@map("Users")
+}
+
 model Categories {
   id Int @id @default(autoincrement()) @map("id")
   name String @unique @map("name")

@@ -1,6 +1,7 @@
 import express from "express";
 import Joi from 'joi';
 import { prisma } from "../utils/prisma/index.js";
+import authMiddlewares from "../middlewares/auth.middlewars.js";
 
 const router = express.Router();
 // joi를 이용해 입력되는 데이터의 조건을 제한하였습니다.
@@ -10,7 +11,7 @@ const checkCategory = Joi.object({
 });
 
 // 카테고리 생성하는 API 입니다.
-router.post("/categories", async (req, res, next) => {
+router.post("/categories", authMiddlewares, async (req, res, next) => {
   try {
     // joi를 통한 유효성 검사입니다.
     const validatedName = await checkCategory.validateAsync(req.body)
@@ -30,9 +31,7 @@ router.post("/categories", async (req, res, next) => {
       where: { name: name },
     });
     if (foundName) {
-      return res
-        .status(401)
-        .json({ errorMessage: "이미 존재하는 카테고리 입니다." });
+      next(new Error('repeated category'));
     }
     // order를 생성하는 메서드 입니다.
     const maxOrder = await prisma.categories.findFirst({
@@ -78,7 +77,7 @@ router.get("/categories", async (req, res, next) => {
 });
 
 // 특정 카테고리의 정보를 변경하는 API입니다.
-router.patch("/categories/:categoryId", async (req, res, next) => {
+router.patch("/categories/:categoryId", authMiddlewares, async (req, res, next) => {
   try {
     const { categoryId } = req.params;
     // joi를 통한 유효성 검사입니다.
@@ -89,9 +88,7 @@ router.patch("/categories/:categoryId", async (req, res, next) => {
     }
     // 일단 클라이언트가 입력한 데이터가 올바른지 확인합니다.
     if (!name || !order) {
-      return res
-        .status(400)
-        .json({ errorMessage: "데이터 형식이 올바르지 않습니다." });
+      return next(new Error("unqualified"));
     }
     
     // categoryId가 존재하는지 확인하는 메서드 입니다.
@@ -122,7 +119,7 @@ router.patch("/categories/:categoryId", async (req, res, next) => {
 });
 
 // 특정 카테고리를 삭제하는 API입니다.
-router.delete("/categories/:categoryId", async (req, res, next) => {
+router.delete("/categories/:categoryId", authMiddlewares, async (req, res, next) => {
   try {
     const { categoryId } = req.params;
     // 먼저 특정 카테고리를 조회합니다.
