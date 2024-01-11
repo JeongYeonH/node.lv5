@@ -7,7 +7,7 @@ export default async function (req, res, next) {
     const { authoriazation } = req.cookies;
     // 토큰 존재 여부를 확인합니다.
     if(!authoriazation){
-      return res.status(404).json({message: '토큰이 존재하지 않습니다. 로그인을 하셨나요?'});
+      return res.status(400).json({message: '로그인이 필요한 서비스입니다.'});
     }
     // 쿠키가 Bearar형식인지 검사를 합니다.
     const [tokenType, token] = authoriazation.split(" ");
@@ -28,10 +28,6 @@ export default async function (req, res, next) {
     if(!user){
         res.clearCookie('authoriazation');
         throw new Error('토큰 사용자가 존재하지 않습니다.');
-    }
-    // 사용자가 권한이 없을 시 다음 에러를 전달합니다.
-    if(user_type !=='OWNER'){
-        return res.status(401).json({message: '사장님만 사용할 수 있는 API입니다.'});
     }
     req.user = user;
     next();

@@ -10,11 +10,14 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+
 model Users {
   id Int @id @default(autoincrement()) @map("id")
   nickname String @unique @map("nickname")
   password String @map("password")
   authorization String @map("authorization")
+
+  Orders Orders[]
 
   @@map("Users")
 }
@@ -40,6 +43,23 @@ model Menu {
   status String @map("status")
 
   Category Categories @relation(fields: [CategoryId], references: [id], onDelete: Cascade)
+  Orders Orders[]
 
   @@map("Menu")
+}
+
+model Orders {
+  id Int @id @default(autoincrement()) @map("id")
+  UserId Int @map("UserId")
+  MenuId Int @map("MenuId")
+
+  quantity Int @map("quantity")
+  status String @map("status")
+  createdAt DateTime @default(now()) @map("createdAt")
+  totalPrice Int @map("totalPrice")
+
+  User Users @relation(fields: [UserId], references: [id], onDelete: Cascade)
+  Menu Menu @relation(fields: [MenuId], references: [id], onDelete: Cascade)
+
+  @@map("Orders")
 }

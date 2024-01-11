@@ -1,38 +1,40 @@
 import express from "express";
 import Joi from "joi";
-import AWS from "@aws-sdk/client-s3";
-import fs from "fs";
 import { prisma } from "../utils/prisma/index.js";
 import authMiddlewares from "../middlewares/auth.middlewars.js";
+import imageUploader from "../middlewares/imageUploader.js";
 
 const router = express.Router();
-const s3 = new AWS.S3();
+
 const checkOrder = Joi.object({
   name: Joi.string().min(2).max(20).required(),
   description: Joi.string().min(5).max(40).required(),
-  imagePath: Joi.string(),
+  image: Joi.string(),
   price: Joi.number(),
   order: Joi.number(),
   status: Joi.string(),
 });
+// 이미지 등록 API입니다.
 
 // 메뉴를 등록하는 API입니다.
 router.post(
   "/categories/:categoryId/menus",
   authMiddlewares,
+  imageUploader.single("image"),
   async (req, res, next) => {
     try {
+      if (req.user.authorization !== "OWNER") {
+        next(new Error("OnlyOwner"));
+      }
       // 유효성 검사를 합니다.
-      const { name, description, imagePath, price, status } =
+      const { name, description, image, price, status } =
         await checkOrder.validateAsync(req.body);
       // 메뉴 가격이 0으로 표시되면 오류 메시지를 반환합니다.
       if (price === 0) {
-        return res
-          .status(400)
-          .json({ errorMessage: "메뉴 가격은 0보다 작을 수 없습니다." });
+        return next(new Error("noZero"));
       }
       // 일부가 등록 데이터가 누락되었을 경우 오류를 반환합니다.
-      if (!name || !description || !imagePath || !price || !status) {
+      if (!name || !description || !price || !status) {
         return next(new Error("unqualified"));
       }
 
@@ -53,45 +55,14 @@ router.post(
         },
       });
       const order = maxOrder ? maxOrder.order + 1 : 1;
-
-      // s3에 이미지URL을 등록하는 메서드 입니다.
-      const bucketName = "yeonz90dash";
-      const key = "path/in/s3/image.jpg";
-
-      try {
-        const fileContent = fs.readFileSync(imagePath);
-      } catch (err) {
-        console.error(err);
-      }
-
-      const uploadParams = {
-        Bucket: bucketName,
-        Key: key,
-        Body: fileContent,
-      };
-
-      // 이제 s3서버에 이미지를 업로드 합니다.
-      const imageUrl = "";
-      s3.upload(uploadParams, (err, data) => {
-        console.log("업로드 함수 실행");
-        if (err) {
-          console.error("이미지 업로드 실패", err);
-        } else {
-          console.log("이미지 업로드 성공");
-          imageUrl = data.Location;
-        }
-      });
-      // 아직 이 부분은 오류가 있어서 성공시키지 못했습니다.
-
-
-
+      req.body.image = req.file.location;
 
       // 해당 조건이 다 만족되었을 경우, sql에 해당 메뉴를 등록합니다.
       const menu = await prisma.menu.create({
         data: {
           name: name,
           description: description,
-          image: imageUrl,
+          image: req.file.location,
           price: price,
           order: order,
           status: status,
@@ -101,7 +72,7 @@ router.post(
       // 메뉴 등록이 완료되면 클라이언트에게 완료 메시지를 반환합니다.
       return res.status(201).json({ Message: "메뉴를 등록하였습니다." });
     } catch (error) {
-      next(error);
+      console.log(error);
     }
   }
 );
@@ -166,9 +137,7 @@ router.get("/categories/:categoryId/menus/:menuId", async (req, res, next) => {
       },
     });
     if (!menu) {
-      return res
-        .status(404)
-        .json({ errorMessage: "존재하지 않는 메뉴입니다." });
+      return next(new Error("noMenu"));
     }
 
     // 상세 조회된 메뉴를 클라이언트에게 반환합니다.
@@ -184,14 +153,15 @@ router.patch(
   authMiddlewares,
   async (req, res, next) => {
     try {
+      if (req.user.authorization !== "OWNER") {
+        next(new Error("OnlyOwner"));
+      }
       // 유효성 검사를 합니다.
       const { name, description, price, order, status } =
         await checkOrder.validateAsync(req.body);
       // 메뉴 가격이 0으로 표시되면 오류 메시지를 반환합니다.
       if (price === 0) {
-        return res
-          .status(400)
-          .json({ errorMessage: "메뉴 가격은 0보다 작을 수 없습니다." });
+        return next(new Error("noZero"));
       }
       // 데이터 형식이 올바른지 확인을 합니다.
       if (!name || !description || !order || !price || !status) {
@@ -206,10 +176,15 @@ router.patch(
         return next(new Error("noCategory"));
       }
       // 메뉴 조회
-      validateMenu(req, res);
+      const { menuId } = req.params;
+      const existingmenu = await prisma.menu.findFirst({
+        where: { id: +menuId },
+      });
+      if (!existingmenu) {
+        return next(new Error("noMenu"));
+      }
 
       // 이후 데이터를 수정합니다.
-      const { menuId } = req.params;
       const modiedMenu = await prisma.menu.update({
         where: { id: +menuId },
         data: {
@@ -234,6 +209,9 @@ router.delete(
   authMiddlewares,
   async (req, res, next) => {
     try {
+      if (req.user.authorization !== "OWNER") {
+        next(new Error("OnlyOwner"));
+      }
       const { categoryId } = req.params;
       // 먼저 특정 카테고리를 조회합니다.
       const existingPost = await prisma.categories.findUnique({
@@ -246,8 +224,13 @@ router.delete(
         return next(new Error("noCategory"));
       }
       // 메뉴 id를 조회해서 존재 여부를 확인합니다.
-      validateMenu(req, res);
       const { menuId } = req.params;
+      const existingmenu = await prisma.menu.findFirst({
+        where: { id: +menuId },
+      });
+      if (!existingmenu) {
+        return next(new Error("noMenu"));
+      }
 
       // 이후 삭제를 진행합니다.
       const menu = await prisma.menu.delete({
@@ -261,16 +244,5 @@ router.delete(
     }
   }
 );
-
-// 리펙토링한 함수입니다.
-const validateMenu = async (req, res) => {
-  const { menuId } = req.params;
-  const existingmenu = await prisma.menu.findFirst({
-    where: { id: +menuId },
-  });
-  if (!existingmenu) {
-    return res.status(404).json({ errorMessage: "존재하지 않는 메뉴입니다." });
-  }
-};
 
 export default router;

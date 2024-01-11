@@ -3,6 +3,7 @@ import Joi from 'joi';
 import { prisma } from "../utils/prisma/index.js";
 import authMiddlewares from "../middlewares/auth.middlewars.js";
 
+
 const router = express.Router();
 // joi를 이용해 입력되는 데이터의 조건을 제한하였습니다.
 const checkCategory = Joi.object({
@@ -10,9 +11,12 @@ const checkCategory = Joi.object({
   order: Joi.number(),
 });
 
+
 // 카테고리 생성하는 API 입니다.
 router.post("/categories", authMiddlewares, async (req, res, next) => {
   try {
+    const { id } = req.user;
+    if(req.user.authorization !== 'OWNER'){ next(new Error('OnlyOwner'));}
     // joi를 통한 유효성 검사입니다.
     const validatedName = await checkCategory.validateAsync(req.body)
     const { error, name } = validatedName;
@@ -79,6 +83,7 @@ router.get("/categories", async (req, res, next) => {
 // 특정 카테고리의 정보를 변경하는 API입니다.
 router.patch("/categories/:categoryId", authMiddlewares, async (req, res, next) => {
   try {
+    if(req.user.authorization !== 'OWNER'){ next(new Error('OnlyOwner'));}
     const { categoryId } = req.params;
     // joi를 통한 유효성 검사입니다.
     const validatedName = await checkCategory.validateAsync(req.body)
@@ -121,6 +126,7 @@ router.patch("/categories/:categoryId", authMiddlewares, async (req, res, next) 
 // 특정 카테고리를 삭제하는 API입니다.
 router.delete("/categories/:categoryId", authMiddlewares, async (req, res, next) => {
   try {
+    if(req.user.authorization !== 'OWNER'){ next(new Error('OnlyOwner'));}
     const { categoryId } = req.params;
     // 먼저 특정 카테고리를 조회합니다.
     const existingPost = await prisma.categories.findUnique({
